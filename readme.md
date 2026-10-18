@@ -47,8 +47,9 @@ The dataset does **not** contain gender, occupation, credit score, premium, dedu
 ### 3.3 Predictive Modeling Techniques
 
 - **Baseline:** a `DummyClassifier` that always predicts "No Claim". It shows why accuracy is misleading on this data.
-- **Logistic regression** with `class_weight='balanced'`, chosen for interpretability.
-- **Evaluation metrics:** precision, recall, F1, ROC-AUC and PR-AUC, rather than accuracy.
+- **Models:** class-balanced logistic regression and a class-balanced Random Forest, each compared with the dummy baseline.
+- **Cross-validation and tuning:** 3-fold stratified cross-validation on the training split. `GridSearchCV` selects each model's hyperparameters using average precision (PR-AUC); preprocessing is inside the pipeline and is fit independently within each fold. Logistic regression searches `C` in `[0.01, 0.1, 1, 10]`. Random Forest searches `max_depth` in `[8, 16]` and `min_samples_leaf` in `[5, 20]` with 100 trees.
+- **Evaluation metrics:** precision, recall, F1, ROC-AUC and PR-AUC on the held-out test set. PR-AUC is the tuning metric because the positive class is rare; the no-skill PR-AUC reference is approximately 0.064.
 
 ## 4. Key Findings
 
@@ -59,22 +60,32 @@ The dataset does **not** contain gender, occupation, credit score, premium, dedu
 5. **Other factors have weak effects.** Policies with claims have slightly newer vehicles (median 1.0 vs 1.2 years), and older customers (55+) claim slightly more often. Vehicle model shifts the claim rate only between 4.1% and 7.4%. Segment, fuel type, NCAP rating and airbags stay close to the 6.4% average, and fuel type and transmission type rank lowest in feature importance.
 6. **Linear signal is weak.** No numeric feature has an absolute correlation with `claim_status` above 0.08.
 
-**Baseline results (test set, 11,719 policies):**
+**Cross-validation results:**
+
+| Model | Mean CV PR-AUC | Standard deviation |
+|---|---:|---:|
+| Logistic Regression (best `C=0.01`) | 0.089 | 0.004 |
+| Random Forest (100 trees, depth 8, leaf size 20) | 0.105 | 0.003 |
+
+Random Forest was selected as the stronger model family by mean cross-validated PR-AUC. Hyperparameters were selected using only the training split.
+
+**Held-out test results (11,719 policies):**
 
 | Model | Accuracy | Precision | Recall | F1 | ROC-AUC | PR-AUC |
 |---|---|---|---|---|---|---|
 | Dummy (most frequent) | 0.936 | 0.000 | 0.000 | 0.000 | 0.500 | 0.064 |
-| Logistic Regression (balanced) | 0.571 | 0.088 | 0.609 | 0.154 | 0.625 | 0.095 |
+| Tuned Logistic Regression | 0.571 | 0.087 | 0.604 | 0.153 | 0.624 | 0.093 |
+| Tuned Random Forest | 0.587 | 0.098 | 0.664 | 0.171 | 0.665 | 0.106 |
 
-The balanced logistic regression finds about 61% of claims and improves PR-AUC by roughly 50% over a random model, which scores 0.064. Its low precision shows that the available features separate the two classes only modestly.
+The tuned Random Forest improves PR-AUC over the 0.064 no-skill reference and finds about two-thirds of claims at the default threshold. Precision is still low: most policies it flags do not have a claim. The available features provide only modest predictive separation, so the model should not be used for automated pricing or adverse policy decisions.
 
-**Next steps:** tune regularization (C, L1/L2), try tree ensembles (Random Forest, Gradient Boosting) to capture the non-linear tenure and region effects, compare SMOTE with class weighting, and tune the decision threshold for the business-preferred precision/recall trade-off.
+**Business recommendations and next steps:** consider a controlled loss-prevention outreach pilot, not automated underwriting. Work with claims and pricing teams to set a decision threshold based on the relative cost of missed claims and unnecessary outreach. Validate on a later time period, monitor precision, recall and calibration, and investigate additional permissible predictors such as prior claims and coverage details.
 
 ## 5. Repository Structure
 
 ```
 ML_Project_Captstone_Module24/
-├── capstoneProject.ipynb      # Main notebook: EDA, feature engineering, baseline models
+├── capstoneProject.ipynb      # Main notebook: EDA, feature engineering, cross-validated tuning
 ├── data/
 │   └── Claimsdata.csv         # Insurance claims dataset (58,592 rows)
 └── readme.md
